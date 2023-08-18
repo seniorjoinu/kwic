@@ -1,0 +1,30 @@
+{
+  "canisters": {
+    "kwic_backend": {
+      "candid": "src/kwic_backend/kwic_backend.did",
+      "package": "kwic_backend",
+      "type": "rust"
+    },
+    "kwic_frontend": {
+      "dependencies": [
+        "kwic_backend"
+      ],
+      "frontend": {
+        "entrypoint": "src/kwic_frontend/src/index.html"
+      },
+      "source": [
+        "src/kwic_frontend/assets",
+        "dist/kwic_frontend/"
+      ],
+      "type": "assets"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
