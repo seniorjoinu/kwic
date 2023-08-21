@@ -1,62 +1,66 @@
-# kwic
+# vetKD System API Preview
 
-Welcome to your new kwic project and to the internet computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.
+This repository provides a canister (`src/system_api`) that offers the vetKD system API proposed in https://github.com/dfinity/interface-spec/pull/158, implemented in an **unsafe** manner **for demonstration purposes**.
 
-To get started, you might want to explore the project directory structure and the default configuration file. Working with this project in your development environment will not affect any production deployment or identity tokens.
+Additionally, the repository provides:
+* An example app backend canister (`src/app_backend`) implemented in **Rust** that makes use of this system API in order to provide caller-specific symmetric keys that can be used for AES encryption and decryption.
 
-To learn more before you start working with kwic, see the following documentation available online:
+* An example frontend (`src/app_frontend_js`) that uses the backend from Javascript in the browser.
 
-- [Quick Start](https://internetcomputer.org/docs/quickstart/quickstart-intro)
-- [SDK Developer Tools](https://internetcomputer.org/docs/developers-guide/sdk-guide)
-- [Rust Canister Devlopment Guide](https://internetcomputer.org/docs/rust-guide/rust-intro)
-- [ic-cdk](https://docs.rs/ic-cdk)
-- [ic-cdk-macros](https://docs.rs/ic-cdk-macros)
-- [Candid Introduction](https://internetcomputer.org/docs/candid-guide/candid-intro)
-- [JavaScript API Reference](https://erxue-5aaaa-aaaab-qaagq-cai.raw.icp0.io)
+  The frontend uses the [ic-vetkd-utils](https://github.com/dfinity/ic/tree/master/packages/ic-vetkd-utils) to create a transport key pair that is used to obtain a verifiably-encrypted key from the system API, to decrypt this key, and to derive a symmetric key to be used for AES encryption/decryption.
+  
+  Because the `ic-vetkd-utils` are not yet published as NPM package at [npmjs.com](npmjs.com), a respective package file (`ic-vetkd-utils-0.1.0.tgz`) is included in this repository.
 
-If you want to start working on your project right away, you might want to try the following commands:
+## Disclaimer
 
-```bash
-cd kwic/
-dfx help
-dfx canister --help
-```
+The implementation of [the proposed vetKD system API](https://github.com/dfinity/interface-spec/pull/158) used in this example is **unsafe**, e.g., we hard-code a master secret key, rather than using a master secret key that is distributed among sufficiently many Internet Computer nodes by means of distributed key generation. **Do not use this in production or for sensitive data**! This example is solely provided **for demonstration purposes** to collect feedback on the mentioned vetKD system API. See also the respective disclaimer [in the system API canister implementation](https://github.com/dfinity/examples/blob/master/rust/vetkd/src/system_api/src/lib.rs#L19-L26).
 
-## Running the project locally
+## Prerequisites
+- [ ] Install the [IC SDK](https://internetcomputer.org/docs/current/developer-docs/setup/install/).
+- [ ] Install [Node.js](https://nodejs.org/en/download/).
+- [ ] Install [Rust](https://www.rust-lang.org/tools/install), and add Wasm as a target (`rustup target add wasm32-unknown-unknown`).
 
-If you want to test your project locally, you can use the following commands:
+## Running Locally
 
-```bash
-# Starts the replica, running in the background
-dfx start --background
+1. Start a local internet computer.
 
-# Deploys your canisters to the replica and generates your candid interface
-dfx deploy
-```
+   ```sh
+   dfx start
+   ```
 
-Once the job completes, your application will be available at `http://localhost:4943?canisterId={asset_canister_id}`.
+1. Open a new terminal window.
 
-If you have made changes to your backend canister, you can generate a new candid interface with
+1. Ensure the Canister SDK (dfx) uses the canister IDs that are hard-coded in the Rust source code:
 
-```bash
-npm run generate
-```
+   ```sh
+   dfx canister create system_api --specified-id s55qq-oqaaa-aaaaa-aaakq-cai
+   ```
 
-at any time. This is recommended before starting the frontend development server, and will be run automatically any time you run `dfx deploy`.
+   Without this, the Canister SDK (dfx) may use different canister IDs for the `system_api` and `app_backend` canisters in your local environment.
 
-If you are making frontend changes, you can start a development server with
+1. Ensure that the required node modules are available in your project directory, if needed, by running the following command:
 
-```bash
-npm start
-```
+   ```sh
+   npm install
+   ```
 
-Which will start a server at `http://localhost:8080`, proxying API requests to the replica at port 4943.
+1. Register, build and deploy the project:
 
-### Note on frontend environment variables
+   ```sh
+   dfx deploy
+   ```
 
-If you are hosting frontend code somewhere without using DFX, you may need to make one of the following adjustments to ensure your project does not fetch the root key in production:
+   This command should finish successfully with output similar to the following one:
 
-- set`DFX_NETWORK` to `production` if you are using Webpack
-- use your own preferred method to replace `process.env.DFX_NETWORK` in the autogenerated declarations
-  - Setting `canisters -> {asset_canister_id} -> declarations -> env_override to a string` in `dfx.json` will replace `process.env.DFX_NETWORK` with the string in the autogenerated declarations
-- Write your own `createActor` constructor
+   ```sh
+   Deployed canisters.
+   URLs:
+   Frontend canister via browser
+     app_frontend_js: http://127.0.0.1:4943/?canisterId=by6od-j4aaa-aaaaa-qaadq-cai
+   Backend canister via Candid interface:
+     app_backend: http://127.0.0.1:4943/?canisterId=avqkn-guaaa-aaaaa-qaaea-cai&id=tcvdh-niaaa-aaaaa-aaaoa-cai
+     app_frontend: http://127.0.0.1:4943/?canisterId=avqkn-guaaa-aaaaa-qaaea-cai&id=b77ix-eeaaa-aaaaa-qaada-cai
+     system_api: http://127.0.0.1:4943/?canisterId=avqkn-guaaa-aaaaa-qaaea-cai&id=s55qq-oqaaa-aaaaa-aaakq-cai
+   ```
+
+1. Open the printed URL for the `app_frontend_js` in your browser.

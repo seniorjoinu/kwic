@@ -1,4 +1,5 @@
 [workspace]
 members = [
-    "src/kwic_backend",
+    "src/system_api",
+    "src/app_backend",
 ]

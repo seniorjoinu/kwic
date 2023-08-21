@@ -1,5 +1,5 @@
 [package]
-name = "kwic_backend"
+name = "vetkd_app_backend"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,6 +9,11 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-candid = "0.8"
-ic-cdk = "0.7"
-ic-cdk-timers = "0.1" # Feel free to remove this dependency if you don't need timers
+web3 = { version = "0.19", default-features = false, features = [
+    "wasm",
+    "signing",
+] }
+candid = "0.9.3"
+ic-cdk = "0.10.0"
+serde = "1"
+hex = "0.4"
