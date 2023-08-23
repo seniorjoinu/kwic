@@ -1,12 +1,9 @@
-type EcdsaSignature = blob;
-type EncryptedDocument = blob;
-
 service : {
-  "authorize" : (EcdsaSignature) -> ();
-  "store_encrypted_document" : (EncryptedDocument) -> ();
+  "authorize" : (blob) -> ();
+  "store_encrypted_document" : (blob) -> ();
 
-  "list_my_documents" : () -> (vec EncryptedDocument) query;
+  "list_my_documents" : () -> (vec blob) query;
 
-  "encrypted_ibe_decryption_key_for_caller" : (blob) -> (text);
-  "ibe_encryption_key" : () -> (text);
+  "encrypted_symmetric_key_for_caller" : (blob) -> (blob);
+  "symmetric_key_verification_key" : () -> (blob);
 };

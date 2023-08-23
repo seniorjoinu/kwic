@@ -9,10 +9,10 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-web3 = { version = "0.19", default-features = false, features = [
-    "wasm",
-    "signing",
+libsecp256k1 = { version = "0.7.1", default-features = false, features = [
+    "static-context",
 ] }
+keccak-hash = "0.10"
 candid = "0.9.3"
 ic-cdk = "0.10.0"
 serde = "1"

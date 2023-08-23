@@ -1,3 +1,5 @@
+import { IDocument, TPrimitiveType } from "../data";
+
 export type Hash = ArrayBuffer;
 
 const textEncoder = new TextEncoder();
@@ -41,8 +43,6 @@ export async function sha256(data: ArrayBuffer | Uint8Array): Promise<Hash> {
     }
 }
 
-export type TPrimitiveType = string | number | bigint | boolean;
-
 export function encodePrimitive(data: TPrimitiveType): ArrayBuffer {
     switch (typeof data) {
         case "string":
@@ -68,24 +68,31 @@ function booleanToUin8Array(b: boolean): Uint8Array {
     }
 }
 
+function numToUint8Array(num: number) {
+    let arr = new Uint8Array(8);
+
+    for (let i = 0; i < 8; i++) {
+        arr[i] = num % 256;
+        num = Math.floor(num / 256);
+    }
+
+    return arr;
+}
+
 function numberToUint8Array(n: number | bigint): Uint8Array {
     if (Number.isNaN(n)) {
         throw new Error("The number is NaN");
     }
 
-    let buf: Buffer;
-
-    if ((typeof n === "number" && Number.isInteger(n))) {
-        buf = Buffer.allocUnsafe(6);
-        buf.writeUintLE(n, 0, 6);
-    } else if (typeof n === "bigint") {
+    if (typeof n === "bigint") {
         return toLittleEndian(n);
-    } else {
-        buf = Buffer.allocUnsafe(6);
-        buf.writeFloatLE(n, 0);
     }
 
-    return new Uint8Array([...buf]);
+    if (!Number.isInteger(n)) {
+        throw new Error("Floats are not supported");
+    }
+
+    return numToUint8Array(n);
 }
 
 function toLittleEndian(bigNumber: bigint): Uint8Array {
@@ -103,10 +110,6 @@ function toLittleEndian(bigNumber: bigint): Uint8Array {
 
 export interface IKeyTree {
     [key: string]: IKeyTree | null;
-}
-
-export interface IDocument {
-    [key: string]: TPrimitiveType | IDocument;
 }
 
 interface IMerkleObjectField {
@@ -319,4 +322,37 @@ export class HashTree {
 
         return it;
     }
+}
+
+export async function aesGcmEncrypt(message: ArrayBuffer, rawKey: BufferSource): Promise<Uint8Array> {
+    // 96-bits; unique per message
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const aesKey = await window.crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt"]);
+
+    const ciphertextBuffer = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv },
+        aesKey,
+        message,
+    );
+    const ciphertext = new Uint8Array(ciphertextBuffer);
+    var ivAndCiphertext = new Uint8Array(iv.length + ciphertext.length);
+    ivAndCiphertext.set(iv, 0);
+    ivAndCiphertext.set(ciphertext, iv.length);
+
+    return ivAndCiphertext;
+}
+
+export async function aesGcmDecrypt(ivAndCiphertext: Uint8Array, rawKey: BufferSource): Promise<ArrayBuffer> {
+    // 96-bits; unique per message
+    const iv = ivAndCiphertext.subarray(0, 12);
+    const ciphertext = ivAndCiphertext.subarray(12);
+    const aesKey = await window.crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
+
+    let decrypted = await window.crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: iv },
+        aesKey,
+        ciphertext
+    );
+
+    return decrypted;
 }

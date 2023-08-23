@@ -27,7 +27,7 @@
       ],
       "type": "assets",
       "build": [
-        "VITE_CANISTER_ID_APP_BACKEND=$CANISTER_ID_APP_BACKEND npm --prefix src/app_frontend_js run build"
+        "npm run build"
       ]
     }
   },

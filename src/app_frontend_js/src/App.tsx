@@ -1,18 +1,19 @@
 import './App.scss';
 
-import { Component, createSignal } from 'solid-js';
-import Counter from './Counter';
+import { Component, createEffect } from 'solid-js';
+import { MyDocumentsPage } from './pages/my-documents';
+import { authorize } from './api';
+import { ChatPage } from './pages/chat';
 
 const App: Component = () => {
-  const [counter, setCounter] = createSignal(0);
-  setInterval(setCounter, 1000, (c: number) => c + 1);
+  createEffect(() => {
+    authorize();
+  });
 
   return (
     <>
-      <div>
-        <h1 class="header">{counter()}</h1>
-      </div>
-      <Counter />
+      <MyDocumentsPage />
+      <ChatPage />
     </>
   );
 };
