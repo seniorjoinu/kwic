@@ -2,7 +2,10 @@
 
 /* @refresh reload */
 import { render } from 'solid-js/web';
-import App from './App';
+import { Router, Route, Routes } from '@solidjs/router';
+import { MyDocumentsPage } from './pages/my-documents';
+import { ChatPage } from './pages/chat';
+import { ShareRequestPage } from './pages/share-request';
 
 const root = document.getElementById('root');
 
@@ -12,4 +15,12 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   );
 }
 
-render(() => <App />, root!);
+render(() => (
+  <Router>
+    <Routes>
+      <Route path='/my-documents' component={MyDocumentsPage} />
+      <Route path='/chat' component={ChatPage} />
+      <Route path='/request' component={ShareRequestPage} />
+    </Routes>
+  </Router>
+), root!);

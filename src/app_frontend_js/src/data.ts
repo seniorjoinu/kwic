@@ -1,6 +1,7 @@
 import { SigningKey } from "ethers";
 import { WITNESS_PRIVKEY_HEX } from "./api";
 import { Hash, MerkalizedDocument } from "./utils/crypto";
+import { IDigitalDocumentProps } from "./components/DigitalDocument";
 
 export const USERNAME = "Viktor";
 
@@ -15,14 +16,19 @@ export interface ISignedDocument {
     signatureHex: string,
 }
 
-export interface ISchemaTypeConstraint {
-    type: "string" | "number" | "bigint" | "boolean";
+export type TSchemaTypeConstraint = "string" | "number" | "bigint" | "date" | "boolean" | "nested";
+
+export interface ISchemaField {
+    name: string;
+    constraints: {
+        type: TSchemaTypeConstraint,
+    },
 }
 
 export interface IDocumentSchema {
     schemaName: string,
     content: {
-        [key: string]: ISchemaTypeConstraint,
+        [key: string]: ISchemaField,
     }
 }
 
@@ -37,11 +43,36 @@ export const krakozhiaPassport = (): IDocument => ({
 export const krakozhiaPassportSchema = (): IDocumentSchema => ({
     schemaName: "Krakozhia Passport",
     content: {
-        firstName: { type: "string" },
-        lastName: { type: "string" },
-        dateOfBirth: { type: "number" },
-        stateOfResidence: { type: "string" },
-        dateOfIssuance: { type: "number" },
+        firstName: {
+            name: "First Name",
+            constraints: {
+                type: "string"
+            }
+        },
+        lastName: {
+            name: "Last Name",
+            constraints: {
+                type: "string",
+            }
+        },
+        dateOfBirth: {
+            name: "Date Of Birth",
+            constraints: {
+                type: "date"
+            }
+        },
+        stateOfResidence: {
+            name: "State Of Residence",
+            constraints: {
+                type: "string"
+            },
+        },
+        dateOfIssuance: {
+            name: "Date Of Issuance",
+            constraints: {
+                type: "date"
+            }
+        },
     }
 });
 
@@ -58,7 +89,7 @@ export function verifyDocumentSchema(document: IDocument, schema: IDocumentSchem
             return false
         }
 
-        if (typeof document[key] !== schema.content[key].type) {
+        if (schema.content[key].constraints.type !== typeof document[key]) {
             return false;
         }
     }
@@ -93,7 +124,7 @@ export const signedPassport = async (): Promise<ISignedDocument> => ({
 
 export interface IChatMessage {
     from: string,
-    content: string | [string, string] | ISignedDocument;
+    content: string | [string, string] | IDigitalDocumentProps;
     datetime: string,
 }
 
@@ -102,35 +133,40 @@ function toTimeString(d: Date): string {
     return `${d.getMonth().toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 
-export const CHAT = async (): Promise<IChatMessage[]> => [
-    {
-        from: USERNAME,
-        content: "I need a digital copy of my passport.",
-        datetime: toTimeString(now),
-    },
-    {
-        from: krakozhiaWitness().name,
-        content: "Sure! Please, send us photos of you and your passport.",
-        datetime: toTimeString(now),
-    },
-    {
-        from: USERNAME,
-        content: ["face.webp", "passport.jpg"],
-        datetime: toTimeString(now),
-    },
-    {
-        from: USERNAME,
-        content: "Done.",
-        datetime: toTimeString(now),
-    },
-    {
-        from: krakozhiaWitness().name,
-        content: await signedPassport(),
-        datetime: toTimeString(now),
-    },
-    {
-        from: krakozhiaWitness().name,
-        content: "Here you go! Have a great day :)",
-        datetime: toTimeString(now),
-    }
-]
+export const CHAT = async (): Promise<IChatMessage[]> => {
+    const document = await signedPassport();
+    const schema = krakozhiaPassportSchema();
+
+    return [
+        {
+            from: USERNAME,
+            content: "I need a digital copy of my passport.",
+            datetime: toTimeString(now),
+        },
+        {
+            from: krakozhiaWitness().name,
+            content: "Sure! Please, send us photos of you and your passport.",
+            datetime: toTimeString(now),
+        },
+        {
+            from: USERNAME,
+            content: ["face.webp", "passport.jpg"],
+            datetime: toTimeString(now),
+        },
+        {
+            from: USERNAME,
+            content: "Done.",
+            datetime: toTimeString(now),
+        },
+        {
+            from: krakozhiaWitness().name,
+            content: { document, schema, variant: 'chat' },
+            datetime: toTimeString(now),
+        },
+        {
+            from: krakozhiaWitness().name,
+            content: "Here you go! Have a great day :)",
+            datetime: toTimeString(now),
+        }
+    ];
+}

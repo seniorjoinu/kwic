@@ -1,3 +1,4 @@
+import { hexDecode, hexEncode } from "../api";
 import { IDocument, TPrimitiveType } from "../data";
 
 export type Hash = ArrayBuffer;
@@ -253,6 +254,24 @@ export class MerkalizedDocument {
     }
 }
 
+export interface IDocumentProof {
+    witness: HashTree,
+    signatureHex: string,
+}
+
+export function proofToJSON(proof: IDocumentProof): string {
+    return JSON.stringify({ witness: proof.witness.toJSON(), signatureHex: proof.signatureHex })
+}
+
+export function JSONToProof(json: string): IDocumentProof {
+    const p = JSON.parse(json);
+
+    return {
+        witness: HashTree.fromJSON(p.witness),
+        signatureHex: p.signatureHex,
+    };
+}
+
 type HashTreeType = 'Empty' | 'Fork' | 'Labeled' | 'Leaf' | 'Pruned';
 type HashTreePayloadEmpty = null;
 type HashTreePayloadFork = [HashTree, HashTree];
@@ -261,9 +280,127 @@ type HashTreePayloadLeaf = TPrimitiveType;
 type HashTreePayloadPruned = Hash;
 type HashTreePayload = HashTreePayloadEmpty | HashTreePayloadFork | HashTreePayloadLabeled | HashTreePayloadLeaf | HashTreePayloadPruned;
 
+export interface IHashTreeObject {
+    type: HashTreeType,
+    payload: null | string | string[],
+}
+
 export class HashTree {
     private _payload: HashTreePayload;
     private constructor(private _type: HashTreeType) { }
+
+    toJSON(): string {
+        const obj: IHashTreeObject = { type: this._type, payload: null };
+
+        switch (this._type) {
+            case "Empty":
+                break;
+
+            case "Fork":
+                const f = this._payload as HashTreePayloadFork;
+                obj.payload = f.map(it => it.toJSON());
+                break;
+
+            case "Labeled":
+                const l = this._payload as HashTreePayloadLabeled;
+                obj.payload = [l[0], l[1].toJSON()];
+                break;
+
+            case "Leaf":
+                const leaf = this._payload as HashTreePayloadLeaf;
+                obj.payload = JSON.stringify(leaf);
+                break;
+
+            case "Pruned":
+                const p = this._payload as HashTreePayloadPruned;
+                obj.payload = hexEncode(new Uint8Array(p));
+                break;
+        }
+
+        return JSON.stringify(obj);
+    }
+
+    static fromJSON(json: string): HashTree {
+        const obj: IHashTreeObject = JSON.parse(json);
+
+        switch (obj.type) {
+            case "Empty":
+                return HashTree.empty();
+
+            case "Fork": {
+                const p = obj.payload as string[];
+
+                return HashTree.fork(HashTree.fromJSON(p[0]), HashTree.fromJSON(p[1]))
+            }
+
+            case "Labeled": {
+                const p = obj.payload as string[];
+
+                return HashTree.labeled(p[0], HashTree.fromJSON(p[1]));
+            }
+
+            case "Leaf": {
+                const p = obj.payload as string;
+
+                return HashTree.leaf(JSON.parse(p));
+            }
+
+            case "Pruned": {
+                const p = obj.payload as string;
+
+                return HashTree.pruned(hexDecode(p))
+            }
+        }
+    }
+
+    toDocument(): IDocument {
+        const res: IDocument = {};
+
+        this.gatherDocumentFields(res, null);
+
+        return res;
+    }
+
+    private gatherDocumentFields(res: IDocument, cur: string | null) {
+        switch (this._type) {
+            case "Fork": {
+                const p = this._payload as HashTreePayloadFork;
+
+                const res1 = {};
+                const res2 = {};
+
+                p[0].gatherDocumentFields(res1, cur);
+                p[1].gatherDocumentFields(res2, cur);
+
+                res = { ...res, ...res1, ...res2 };
+            }
+
+            case "Labeled": {
+                const p = this._payload as HashTreePayloadLabeled;
+
+                const res1 = { [p[0]]: {} };
+
+                p[1].gatherDocumentFields(res1, p[0]);
+
+                res = { ...res, ...res1 };
+            }
+
+            case "Leaf": {
+                const p = this._payload as HashTreePayloadLeaf;
+
+                if (!cur) {
+                    throw new Error("Unlabeled leaf found!");
+                }
+
+                res[cur] = p;
+            }
+
+            case "Empty":
+            case "Pruned": {
+                return;
+            }
+        }
+    }
 
     async reconstruct(): Promise<Hash> {
         switch (this._type) {
