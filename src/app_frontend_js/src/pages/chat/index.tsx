@@ -3,6 +3,8 @@ import { CHAT, IChatMessage, USERNAME, krakozhiaWitness } from "../../data"
 import { DigitalDocument } from "../../components/DigitalDocument";
 import faceImg from '../../../assets/face.webp';
 import passportImg from '../../../assets/passport.jpg';
+import { Header } from "../../components/Header/header";
+import "./index.scss";
 
 
 function ChatMessage(props: IChatMessage) {
@@ -90,7 +92,8 @@ export function ChatPage() {
     }
 
     return (
-        <main>
+        <main class="chat">
+            <Header />
             <h3>{krakozhiaWitness().name}</h3>
             <div id="chat-window">
                 {messages()}

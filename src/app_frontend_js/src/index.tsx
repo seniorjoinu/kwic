@@ -6,6 +6,7 @@ import { Router, Route, Routes } from '@solidjs/router';
 import { MyDocumentsPage } from './pages/my-documents';
 import { ChatPage } from './pages/chat';
 import { ShareRequestPage } from './pages/share-request';
+import { AirlinesPage } from './pages/airlines';
 
 const root = document.getElementById('root');
 
@@ -18,6 +19,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 render(() => (
   <Router>
     <Routes>
+      <Route path='/' component={AirlinesPage} />
       <Route path='/my-documents' component={MyDocumentsPage} />
       <Route path='/chat' component={ChatPage} />
       <Route path='/request' component={ShareRequestPage} />

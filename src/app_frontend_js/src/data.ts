@@ -1,6 +1,6 @@
 import { SigningKey } from "ethers";
 import { WITNESS_PRIVKEY_HEX } from "./api";
-import { Hash, MerkalizedDocument } from "./utils/crypto";
+import { Hash, IKeyTree, MerkalizedDocument } from "./utils/crypto";
 import { IDigitalDocumentProps } from "./components/DigitalDocument";
 
 export const USERNAME = "Viktor";
@@ -76,6 +76,7 @@ export const krakozhiaPassportSchema = (): IDocumentSchema => ({
     }
 });
 
+// TODO: only works for single level documents
 export function verifyDocumentSchema(document: IDocument, schema: IDocumentSchema): boolean {
     const fieldsDoc = Object.keys(document).sort();
     const fieldsSchema = Object.keys(schema.content);
@@ -90,6 +91,17 @@ export function verifyDocumentSchema(document: IDocument, schema: IDocumentSchem
         }
 
         if (schema.content[key].constraints.type !== typeof document[key]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// TODO: only works for single level documents
+export function verifyDocumentRequest(document: IDocument, request: IKeyTree): boolean {
+    for (let key of Object.keys(request)) {
+        if (!document.hasOwnProperty(key)) {
             return false;
         }
     }
@@ -128,9 +140,20 @@ export interface IChatMessage {
     datetime: string,
 }
 
-const now = new Date();
+export const now = new Date("06/18/2004");
+
 function toTimeString(d: Date): string {
-    return `${d.getMonth().toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+    return `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+}
+
+export function toDateString(d: Date): string {
+    return `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}/${d.getFullYear()}`
+}
+
+export function calculateAge(birthday: number, now: number) {
+    var ageDifMs = now - birthday;
+    var ageDate = new Date(ageDifMs);
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
 }
 
 export const CHAT = async (): Promise<IChatMessage[]> => {

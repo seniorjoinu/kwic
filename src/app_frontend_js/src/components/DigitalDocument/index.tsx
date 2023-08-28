@@ -2,7 +2,7 @@ import { Signature } from "ethers";
 import { IDocument, IDocumentSchema, ISchemaField, ISignedDocument, TPrimitiveType, krakozhiaWitness } from "../../data";
 import { storeDocument } from "../../api";
 import { createSignal } from "solid-js";
-import { shareDataRequest } from "../../pages/share-request";
+import { parentWindow, shareDataRequest } from "../../pages/share-request";
 import { IDocumentProof, MerkalizedDocument, proofToJSON } from "../../utils/crypto";
 
 export interface IDigitalDocumentFieldProps {
@@ -68,8 +68,8 @@ export function DigitalDocument(props: IDigitalDocumentProps) {
     };
 
     const handleUse = async () => {
-        if (shareDataRequest === null) {
-            throw new Error("Request is null");
+        if (shareDataRequest === null || parentWindow === null) {
+            throw new Error("Request or parent is null");
         }
 
         setBlocked(true);
@@ -82,7 +82,7 @@ export function DigitalDocument(props: IDigitalDocumentProps) {
             signatureHex: props.document.signatureHex,
         };
 
-        window.parent.postMessage(proofToJSON(proof));
+        parentWindow.postMessage(proofToJSON(proof), { targetOrigin: document.referrer });
 
         setTimeout(() => window.close(), 1000);
     }

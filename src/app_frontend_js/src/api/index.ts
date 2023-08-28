@@ -6,7 +6,8 @@ import { BrowserProvider, keccak256, ethers } from 'ethers';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
 import * as vetkd from 'vetkd';
 import { aesGcmDecrypt, aesGcmEncrypt } from '../utils/crypto';
-import { IDocument, ISignedDocument } from '../data';
+import { ISignedDocument } from '../data';
+import { hexDecode, hexEncode } from '../utils/encode';
 
 export const WITNESS_PRIVKEY_HEX = '0x0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a';
 export const WITNESS_PUBKEY_HEX = '0x04f76a39d05686e34a4420897e359371836145dd3973e3982568b60f8433adde6eb61f3694eae50e3815d4ed3068d5892f2571dc8f654271535e23b513dea6cbe3';
@@ -14,13 +15,17 @@ export const WITNESS_PUBKEY_HEX = '0x04f76a39d05686e34a4420897e359371836145dd397
 // @ts-expect-error
 const provider = new BrowserProvider(window.ethereum);
 const backendCanisterId: string = import.meta.env.VITE_CANISTER_ID_APP_BACKEND;
-const icAgent = new HttpAgent({ identity: getIdentity(), host: 'http://localhost:44353' });
+const icAgent = new HttpAgent({ identity: getIdentity(), host: 'http://localhost:40037' });
 const backend: ActorSubclass<BackendService> = createActor(backendCanisterId, icAgent);
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
 export let isAuthorized = false;
 export let aesRawKey: Uint8Array | null = null;
+// this address is calculated in a not compatible with metamask way, 
+// so it won't be the same as the one metamask shows us
+// I was unable to find a rust library that compiles to wasm and produces correct addresses form pubkeys
+// this one is also fine from security POW though
 export let metamaskAddress: Uint8Array | null = null;
 
 export async function authorize() {
@@ -97,8 +102,7 @@ export async function listMyDocuments(): Promise<ISignedDocument[]> {
         await authorize();
     }
 
-    // @ts-expect-error
-    const encryptedDocuments: Uint8Array[] = await backend.list_my_documents();
+    const encryptedDocuments: Uint8Array[] = (await backend.list_my_documents()) as Uint8Array[];
     const decryptedDocuments = await Promise.all(encryptedDocuments.map(it => aesGcmDecrypt(it, aesRawKey!)));
 
     return decryptedDocuments.map(it => JSON.parse(textDecoder.decode(it)));
@@ -140,16 +144,3 @@ function createActor<T>(canisterId: string, agent: HttpAgent): ActorSubclass<T> 
         canisterId,
     });
 };
-
-export const hexEncode = (bytes: Uint8Array) =>
-    bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '');
-
-export const hexDecode = (hexString: string) => {
-    const matches = hexString.match(/.{1,2}/g);
-
-    if (matches == null) {
-        throw new Error("Invalid hexstring");
-    }
-
-    return Uint8Array.from(matches.map((byte) => parseInt(byte, 16)));
-}

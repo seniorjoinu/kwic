@@ -1,8 +1,11 @@
-import { createSignal } from "solid-js";
+import { createEffect, createSignal, onMount } from "solid-js";
 import { IShareDataRequest } from "../share-request";
 import { JSONToProof } from "../../utils/crypto";
 import { Signature, SigningKey } from "ethers";
-import { krakozhiaWitness } from "../../data";
+import { calculateAge, krakozhiaWitness, now, toDateString, verifyDocumentRequest } from "../../data";
+import bg from '../../../assets/airport.jpg';
+import logo from '../../../assets/air-log.png';
+import './index.scss';
 
 const shareRequest: IShareDataRequest = {
     keys: {
@@ -12,46 +15,124 @@ const shareRequest: IShareDataRequest = {
     }
 };
 
+export interface IPassportFields {
+    firstName: string;
+    lastName: string;
+    dateOfBirth: number;
+}
+
 export function AirlinesPage() {
     const [blocked, setBlocked] = createSignal(false);
+    const [msg, setMsg] = createSignal<MessageEvent | null>(null);
+    const [fields, setFields] = createSignal<IPassportFields | null>(null);
+
+    onMount(() => {
+        document.title = "Krakozhia Airlines";
+    })
 
     const handleBtn = () => {
+        const f = fields();
+
+        if (f) {
+            alert("Your tickets are ready! Have a great flight!");
+            return;
+        }
+
         setBlocked(true);
-        const w = window.open('http://kwic.localhost/request', "_blank");
+        const w = window.open('http://kwic.localhost:3000/request', "_blank");
 
         if (w === null) {
             throw new Error("Something went wrong");
         }
 
+        window.addEventListener("message", setMsg);
+        w.addEventListener("message", setMsg);
 
-        w.addEventListener('message', handleMessage, false);
-        w.postMessage(JSON.stringify(shareRequest));
+        const message = JSON.stringify(shareRequest);
+
+        setTimeout(() => {
+            w.postMessage(message, "*");
+
+            console.log("message sent", message);
+        }, 1000);
     };
 
-    const handleMessage = async (e: MessageEvent) => {
+    createEffect(() => {
+        handleMessage(msg())
+    }, msg());
+
+    const handleMessage = async (e: MessageEvent | null) => {
+        if (!e || e.origin !== 'http://kwic.localhost:3000') {
+            return;
+        }
+
+        console.log('message received', e);
+
         const proof = JSONToProof(e.data);
         const gatheredFields = proof.witness.toDocument();
 
         console.log('gathered fields', gatheredFields);
 
-        // TODO: check if returned keys are the same as requested
+        if (!verifyDocumentRequest(gatheredFields, shareRequest.keys)) {
+            throw new Error("Invalid document");
+        }
 
         const rootHash = await proof.witness.reconstruct();
-
         const signature = Signature.from(proof.signatureHex);
         const pubkey = SigningKey.recoverPublicKey(new Uint8Array(rootHash), signature);
 
         if (pubkey !== krakozhiaWitness().signingKey.publicKey) {
-            alert("Invalid signature");
-            return;
+            throw new Error("Invalid signature");
         }
 
-        console.log("Signature verified");
+        console.log("Signature verified!");
+
+        // @ts-expect-error
+        setFields(gatheredFields as IPassportFields);
+
+        setBlocked(false);
     };
 
+    const passenger = () => {
+        const f = fields();
+
+        if (!f) {
+            return undefined;
+        } else {
+            return (
+                <div class="passenger">
+                    <h2>Passenger</h2>
+
+                    <div class="field">
+                        <h4>First name</h4>
+                        <span>{f.firstName}</span>
+                    </div>
+
+                    <div class="field">
+                        <h4>Last name</h4>
+                        <span>{f.lastName}</span>
+                    </div>
+
+                    <div class="field">
+                        <h4>Date of birth</h4>
+                        <span>{toDateString(new Date(f.dateOfBirth))} ({calculateAge(f.dateOfBirth, now.getTime())} years)</span>
+                    </div>
+
+                    <div class="verified">
+                        <p><span>✔</span> Signature verified</p>
+                    </div>
+                </div>
+            )
+        }
+    }
+
+    const btn = () => {
+        return <button disabled={blocked()} onClick={handleBtn}>Book tickets</button>;
+    }
+
     return (
-        <main>
-            <h1>Krakozhia Airlines</h1>
+        <main class="airlines" style={{ "background-image": `url(${bg})` }}>
+            <img class="logo" src={logo} />
             <div class="route">
                 <div class="city">
                     <span>Departure</span>
@@ -59,6 +140,7 @@ export function AirlinesPage() {
                         <option selected value="hml">Homel (HML)</option>
                     </select>
                 </div>
+                <span class="arrow">→</span>
                 <div class="city">
                     <span>Destination</span>
                     <select>
@@ -70,34 +152,33 @@ export function AirlinesPage() {
             <div class="controls">
                 <div class="date">
                     <span>Date</span>
-                    <select>
-                        <option selected value="day">18</option>
-                    </select>
-                    <select>
-                        <option selected value="month">June</option>
-                    </select>
-                    <select>
-                        <option selected value="year">2004</option>
-                    </select>
+                    <div class="form">
+                        <select>
+                            <option selected value="day">18 June 2004</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="time">
                     <span>Time</span>
-                    <select>
-                        <option selected value="hours">12</option>
-                    </select>
-                    <select>
-                        <option selected value="minutes">00</option>
-                    </select>
+                    <div class="form">
+                        <select>
+                            <option selected value="hours">12:00</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="seat">
                     <span>Seat</span>
-                    <select>
-                        <option selected value="seat">57A</option>
-                    </select>
+                    <div class="form">
+                        <select>
+                            <option selected value="seat">57A</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
-            <button disabled={blocked()} onClick={handleBtn}>Buy</button>
+            {btn()}
+
+            {passenger()}
         </main>
     );
 }

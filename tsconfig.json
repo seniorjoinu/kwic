@@ -9,11 +9,9 @@
     "jsxImportSource": "solid-js",
     "types": [
       "vite/client",
-      "jest",
+      "intern",
     ],
     "noEmit": true,
-    "isolatedModules": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
+    "isolatedModules": true
   }
 }

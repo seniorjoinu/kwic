@@ -1,4 +1,6 @@
 import { MerkalizedDocument } from "./crypto";
+const { describe, it } = intern.getPlugin('interface.bdd');
+const { expect } = intern.getPlugin('chai');
 
 async function prepareDocument(): Promise<MerkalizedDocument> {
     return MerkalizedDocument.fromObject({
@@ -14,29 +16,33 @@ async function prepareDocument(): Promise<MerkalizedDocument> {
     });
 }
 
-test('document can be constructed', async () => {
-    const doc = await prepareDocument();
+describe('merkle document', () => {
 
-    expect(doc.keys()).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
-    expect(doc.get('a')).toBe(123);
-    expect(doc.get('b')).toBe(true);
-    expect(doc.get('c')).toBe(1.23);
-    expect(doc.get('d')).toBe(123n);
-    expect(doc.get('e')).toBe('test');
-    expect(doc.get('f')).toBeInstanceOf(MerkalizedDocument);
+    it('document can be constructed', async () => {
+        const doc = await prepareDocument();
 
-    const innerDoc = doc.get('f') as MerkalizedDocument;
-    expect(innerDoc.keys()).toEqual(['a1', 'b1']);
-    expect(innerDoc.get('a1')).toBe(123);
-    expect(innerDoc.get('b1')).toBe(true);
-});
+        expect(doc.keys()).to.deep.eq(['a', 'b', 'c', 'd', 'e', 'f']);
+        expect(doc.get('a')).to.eq(123);
+        expect(doc.get('b')).to.eq(true);
+        expect(doc.get('c')).to.eq(1.23);
+        expect(doc.get('d')).to.eq(123n);
+        expect(doc.get('e')).to.eq('test');
+        expect(doc.get('f')).to.be.instanceof(MerkalizedDocument);
 
-test('witness is valid', async () => {
-    const doc = await prepareDocument();
-    const witness = doc.witness({ a: null, c: null, f: { a1: null } });
+        const innerDoc = doc.get('f') as MerkalizedDocument;
+        expect(innerDoc.keys()).to.deep.eq(['a1', 'b1']);
+        expect(innerDoc.get('a1')).to.eq(123);
+        expect(innerDoc.get('b1')).to.eq(true);
+    });
 
-    const expectedRootHash = doc.rootHash();
-    const actualRootHash = await witness.reconstruct();
+    it('witness is valid', async () => {
+        const doc = await prepareDocument();
+        const witness = doc.witness({ b: null });
 
-    expect(actualRootHash).toEqual(expectedRootHash);
+        const expectedRootHash = doc.rootHash();
+        const actualRootHash = await witness.reconstruct();
+
+        expect(actualRootHash).to.deep.eq(expectedRootHash);
+    })
+
 });

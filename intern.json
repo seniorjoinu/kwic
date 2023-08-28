@@ -1,0 +1,4 @@
+{
+    "plugins": "node_modules/ts-node/register/index.js",
+    "suites": "src/app_frontend_js/**/*.ts"
+}

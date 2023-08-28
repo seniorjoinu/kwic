@@ -1,5 +1,5 @@
-import { hexDecode, hexEncode } from "../api";
-import { IDocument, TPrimitiveType } from "../data";
+import { hexDecode, hexEncode } from "./encode";
+import type { IDocument, TPrimitiveType } from "../data";
 
 export type Hash = ArrayBuffer;
 
@@ -166,33 +166,30 @@ export class MerkalizedDocument {
         return this._document;
     }
 
-    witness(keyTree: IKeyTree): HashTree {
+    witness(keyTree: IKeyTree | null): HashTree {
+        if (keyTree === null) {
+            return HashTree.pruned(this._rootHash);
+        }
+
         let witness: HashTree | null = null;
-        const currentLevelKeys = Object.keys(keyTree);
 
-        this._merkleObj
-            .filter(it => currentLevelKeys.includes(it.key))
-            .forEach(it => {
-                let subtree: HashTree;
-                if (it.value instanceof MerkalizedDocument) {
-                    const nextLevelKeys = keyTree[it.key];
-                    if (!nextLevelKeys) {
-                        throw new Error('InvalidKeyTree');
-                    }
+        for (let field of this._merkleObj) {
+            let node;
 
-                    subtree = it.value.witness(nextLevelKeys);
-                } else {
-                    subtree = HashTree.leaf(it.value);
-                }
+            if (!keyTree.hasOwnProperty(field.key)) {
+                node = HashTree.pruned(field.keyValueHash);
+            } else if (field.value instanceof MerkalizedDocument) {
+                node = HashTree.labeled(field.key, field.value.witness(keyTree[field.key]));
+            } else {
+                node = HashTree.labeled(field.key, HashTree.leaf(field.value));
+            }
 
-                const node = HashTree.labeled(it.key, subtree);
-
-                if (witness == null) {
-                    witness = node;
-                } else {
-                    witness = HashTree.fork(witness, node);
-                }
-            });
+            if (witness == null) {
+                witness = node;
+            } else {
+                witness = HashTree.fork(witness, node);
+            }
+        }
 
         if (witness == null) {
             throw new Error('Unreacheable');
@@ -354,50 +351,47 @@ export class HashTree {
     }
 
     toDocument(): IDocument {
-        const res: IDocument = {};
+        const res = this.gatherDocumentFields() as IDocument;
 
-        this.gatherDocumentFields(res, null);
+        if (typeof res !== "object") {
+            throw new Error("Invalid witness structure");
+        }
 
         return res;
     }
 
-    private gatherDocumentFields(res: IDocument, cur: string | null) {
+    private gatherDocumentFields(): IDocument | TPrimitiveType | {} {
         switch (this._type) {
             case "Fork": {
                 const p = this._payload as HashTreePayloadFork;
 
-                const res1 = {};
-                const res2 = {};
+                const res1 = p[0].gatherDocumentFields() as IDocument;
+                const res2 = p[1].gatherDocumentFields() as IDocument;
 
-                p[0].gatherDocumentFields(res1, cur);
-                p[1].gatherDocumentFields(res2, cur);
+                if (typeof res1 !== "object" || typeof res2 !== "object") {
+                    throw new Error("Invalid witness structure");
+                }
 
-                res = { ...res, ...res1, ...res2 };
+                return { ...res1, ...res2 };
             }
 
             case "Labeled": {
                 const p = this._payload as HashTreePayloadLabeled;
 
-                const res1 = { [p[0]]: {} };
+                const res1 = p[1].gatherDocumentFields();
 
-                p[1].gatherDocumentFields(res1, p[0]);
-
-                res = { ...res, ...res1 };
+                return { [p[0]]: res1 };
             }
 
             case "Leaf": {
                 const p = this._payload as HashTreePayloadLeaf;
 
-                if (!cur) {
-                    throw new Error("Unlabeled leaf found!");
-                }
-
-                res[cur] = p;
+                return p;
             }
 
             case "Empty":
             case "Pruned": {
-                return;
+                return {};
             }
         }
     }
