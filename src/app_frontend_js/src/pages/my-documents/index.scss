@@ -1,3 +1,129 @@
 .my-documents {
-    padding-top: 80px;
+    display: flex;
+    padding-bottom: 100px;
+    flex-direction: column;
+    align-items: center;
+    gap: 120px;
+
+    width: 100%;
+    min-height: 100%;
+    position: relative;
+    overflow: hidden;
+
+    .bg {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+
+        background: #F7F8FA;
+        z-index: -1;
+    }
+
+    .modal {
+        display: flex;
+        width: 700px;
+        padding: 60px 40px 40px 40px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 25px;
+
+        border-radius: 10px;
+        background: #FFF;
+
+        box-shadow: 2px 2px 15px 0px rgba(0, 9, 43, 0.05);
+
+        .title {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+            align-self: stretch;
+
+            h2,
+            p {
+                margin: 0;
+            }
+
+            h2 {
+                align-self: stretch;
+
+                color: #1F1F1F;
+                font-family: Poppins;
+                font-size: 32px;
+                font-style: normal;
+                font-weight: 600;
+                line-height: normal;
+            }
+
+            p {
+                align-self: stretch;
+
+                color: #1F1F1F;
+                font-family: Poppins;
+                font-size: 20px;
+                font-style: normal;
+                font-weight: 400;
+                line-height: normal;
+            }
+        }
+
+        .documents {
+            margin-block-start: 0;
+            margin-block-end: 0;
+            padding-inline-start: 0;
+            list-style-type: none;
+
+            width: 100%;
+            box-sizing: border-box;
+
+            display: flex;
+            flex-flow: column nowrap;
+            gap: 20px;
+        }
+
+        &>button {
+            display: flex;
+            padding: 20px 25px 20px 15px;
+            justify-content: space-between;
+            align-items: center;
+            align-self: stretch;
+
+            border-radius: 5px;
+            border: 1px dashed #476FFE;
+            background-color: white;
+
+            cursor: pointer;
+
+            &>div {
+                display: flex;
+                align-items: center;
+                gap: 15px;
+
+                img {
+                    width: 30px;
+                    height: 20.59px;
+                    flex-shrink: 0;
+
+                    fill: #476FFE;
+                }
+
+                span {
+                    color: #1F1F1F;
+                    font-family: Poppins;
+                    font-size: 16px;
+                    font-style: normal;
+                    font-weight: 600;
+                    line-height: normal;
+                }
+            }
+
+            img {
+                width: 12px;
+                height: 12px;
+
+                stroke-width: 2px;
+                stroke: #476FFE;
+            }
+        }
+    }
 }

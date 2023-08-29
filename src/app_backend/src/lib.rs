@@ -13,6 +13,7 @@ use crate::types::State;
 mod types;
 
 const VETKD_SYSTEM_API_CANISTER_ID: &str = "s55qq-oqaaa-aaaaa-aaakq-cai";
+const MESSAGE_PREFIX: &str = "\x19Ethereum Signed Message:\n";
 
 thread_local! {
     static STATE: RefCell<State> = RefCell::default();
@@ -35,8 +36,16 @@ fn authorize(principal_signature: EcdsaSignature) {
         panic!("Please, authorize yourself");
     }
 
+    let msg = format!("Log in as {}", caller.to_text());
+    let prefix = format!("{}{}", MESSAGE_PREFIX, msg.as_bytes().len());
+
+    let mut msg_bytes = Vec::new();
+
+    msg_bytes.extend_from_slice(prefix.as_bytes());
+    msg_bytes.extend_from_slice(msg.as_bytes());
+
     let mut principal_hash = [0u8; 32];
-    keccak_256(caller.as_slice(), &mut principal_hash);
+    keccak_256(&msg_bytes, &mut principal_hash);
 
     let signature =
         Signature::parse_standard_slice(&principal_signature[0..64]).expect("Invalid signature");
@@ -51,10 +60,12 @@ fn authorize(principal_signature: EcdsaSignature) {
 
     let public_key = recover(&message, &signature, &recovery_id).expect("Unable to recover pubkey");
     let mut pubkey_hash = [0u8; 32];
-    keccak_256(&public_key.serialize(), &mut pubkey_hash);
+    keccak_256(&public_key.serialize()[1..], &mut pubkey_hash);
 
     let mut user_address = [0u8; 20];
     user_address.copy_from_slice(&pubkey_hash[12..]);
+
+    ic_cdk::println!("user address 0x{}", hex::encode(user_address));
 
     STATE.with(|it| {
         it.borrow_mut().users.insert(caller, user_address);

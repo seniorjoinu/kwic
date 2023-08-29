@@ -1,0 +1,197 @@
+.document {
+    &.margintop {
+        margin-top: 17px;
+    }
+
+    position: relative;
+
+    display: flex;
+    padding: 25px 15px 20px 15px;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 20px;
+    align-self: stretch;
+
+    border-radius: 5px;
+    background: #FFF;
+
+    &.standalone {
+        width: 100%;
+        box-sizing: border-box;
+        background: #F2F4FF;
+    }
+
+    .name {
+        margin: 0;
+
+        display: flex;
+        align-items: center;
+        gap: 15px;
+
+        color: #1F1F1F;
+        font-family: Poppins;
+        font-size: 20px;
+        font-style: normal;
+        font-weight: 600;
+        line-height: normal;
+
+        img {
+            width: 30px;
+            height: 20.59px;
+            flex-shrink: 0;
+        }
+    }
+
+    .fields {
+        margin-block-start: 0;
+        margin-block-end: 0;
+        padding-inline-start: 0;
+        list-style-type: none;
+
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 10px;
+        align-self: stretch;
+
+        li {
+            display: flex;
+            padding: 10px 15px 15px 15px;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 5px;
+            align-self: stretch;
+
+            border-radius: 5px;
+            background: #F9FAFF;
+
+            .key {
+                color: #1F1F1F;
+                font-family: Poppins;
+                font-size: 12px;
+                font-style: normal;
+                font-weight: 500;
+                line-height: normal;
+            }
+
+            .value {
+                color: #1F1F1F;
+                font-family: Poppins;
+                font-size: 16px;
+                font-style: normal;
+                font-weight: 400;
+                line-height: normal;
+                text-transform: uppercase;
+            }
+        }
+    }
+
+    .verified {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        align-self: stretch;
+
+        color: #1F1F1F;
+        font-family: Poppins;
+        font-size: 16px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: normal;
+
+        img {
+            width: 20px;
+            height: 20px;
+        }
+
+        span {
+            color: #1F1F1F;
+            font-family: Poppins;
+            font-size: 16px;
+            font-style: normal;
+            font-weight: 600;
+            line-height: normal;
+        }
+    }
+
+    .btn.full {
+        cursor: pointer;
+
+        display: flex;
+        height: 60px;
+        padding: 0px 45px;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        align-self: stretch;
+
+        border-radius: 10px;
+        border: none;
+        background: #1F1F1F;
+
+        color: #FFF;
+        font-family: Poppins;
+        font-size: 18px;
+        font-style: normal;
+        font-weight: 600;
+        line-height: normal;
+    }
+
+    h6 {
+        margin: 0;
+
+        width: 100%;
+        box-sizing: border-box;
+
+        display: flex;
+        padding: 10px 10px 10px 25px;
+        justify-content: space-between;
+        align-items: center;
+
+        border-radius: 10px;
+        background: #E8EBFA;
+
+        span {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+
+            color: #000;
+            font-family: Poppins;
+            font-size: 18px;
+            font-style: normal;
+            font-weight: 500;
+            line-height: normal;
+
+            img {
+                width: 15.503px;
+                height: 12px;
+            }
+        }
+
+        .btn.small {
+            cursor: pointer;
+
+            display: flex;
+            height: 60px;
+            padding: 0px 20px;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+
+            border-radius: 10px;
+            border: none;
+            background: #1F1F1F;
+
+            color: #FFF;
+            font-family: Poppins;
+            font-size: 18px;
+            font-style: normal;
+            font-weight: 600;
+            line-height: normal;
+        }
+    }
+}

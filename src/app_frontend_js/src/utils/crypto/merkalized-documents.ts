@@ -1,131 +1,23 @@
-import { hexDecode, hexEncode } from "./encode";
-import type { IDocument, TPrimitiveType } from "../data";
+/// This module implements merkalized documents - digital documents which allow partial disclosure of fields
+/// For example, you can have a signed document with three fields A, B and C, but only disclose B to other parties
+/// This is achieved via transforming a document into a Merkle tree (using the same protocol as in the asset canister)
 
-export type Hash = ArrayBuffer;
+import { Signature, SigningKey } from "ethers";
+import { IDocument, IDocumentSchema, PRIMITIVE_TYPES, TPrimitiveType } from "../data/types";
+import { bytesToHex, hexToBytes, primitiveToBytes, strToBytes } from "../encode";
+import { krakozhiaSigner } from "../data";
+import { krakozhiaPassportService } from "../data/prelude";
 
-const textEncoder = new TextEncoder();
-const FORK_DOMAIN = domainSep('ic-hashtree-fork');
-const LEAF_DOMAIN = domainSep('ic-hashtree-leaf');
-const LABELED_DOMAIN = domainSep('ic-hashtree-labeled');
-const EMPTY_DOMAIN = domainSep('ic-hashtree-empty');
-const PRIMITIVE_TYPES = ["string", "number", "bigint", "boolean"];
+export type THash = ArrayBuffer;
 
-function domainSep(domain: string): ArrayBuffer {
-    return new Uint8Array([domain.length, ...textEncoder.encode(domain)]);
-}
-
-async function forkHash(l: Hash, r: Hash): Promise<Hash> {
-    const buf = new Blob([FORK_DOMAIN, l, r]);
-
-    return sha256(await buf.arrayBuffer());
-}
-
-async function leafHash(leaf: TPrimitiveType): Promise<Hash> {
-    const buf = new Blob([LEAF_DOMAIN, encodePrimitive(leaf)])
-
-    return sha256(await buf.arrayBuffer());
-}
-
-async function labeledHash(label: string, contentHash: Hash): Promise<Hash> {
-    const buf = new Blob([LABELED_DOMAIN, textEncoder.encode(label), contentHash]);
-
-    return sha256(await buf.arrayBuffer());
-}
-
-async function emptyHash(): Promise<Hash> {
-    return sha256(EMPTY_DOMAIN);
-}
-
-export async function sha256(data: ArrayBuffer | Uint8Array): Promise<Hash> {
-    try {
-        return crypto.subtle.digest('SHA-256', data);
-    } catch (e) {
-        throw new Error("Your device doesn't support cryptography API! Try upgrading your browser.");
-    }
-}
-
-export function encodePrimitive(data: TPrimitiveType): ArrayBuffer {
-    switch (typeof data) {
-        case "string":
-            return textEncoder.encode(data);
-
-        case "number":
-        case "bigint":
-            return numberToUint8Array(data);
-
-        case "boolean":
-            return booleanToUin8Array(data);
-
-        default:
-            throw new Error("Unsupported type");
-    }
-}
-
-function booleanToUin8Array(b: boolean): Uint8Array {
-    if (b) {
-        return new Uint8Array([1]);
-    } else {
-        return new Uint8Array([0]);
-    }
-}
-
-function numToUint8Array(num: number) {
-    let arr = new Uint8Array(8);
-
-    for (let i = 0; i < 8; i++) {
-        arr[i] = num % 256;
-        num = Math.floor(num / 256);
-    }
-
-    return arr;
-}
-
-function numberToUint8Array(n: number | bigint): Uint8Array {
-    if (Number.isNaN(n)) {
-        throw new Error("The number is NaN");
-    }
-
-    if (typeof n === "bigint") {
-        return toLittleEndian(n);
-    }
-
-    if (!Number.isInteger(n)) {
-        throw new Error("Floats are not supported");
-    }
-
-    return numToUint8Array(n);
-}
-
-function toLittleEndian(bigNumber: bigint): Uint8Array {
-    let result = new Uint8Array(32);
-    let i = 0;
-
-    while (bigNumber > 0n) {
-        result[i] = Number(bigNumber % 256n);
-        bigNumber = bigNumber / 256n;
-        i += 1;
-    }
-
-    return result;
-}
-
-export interface IKeyTree {
-    [key: string]: IKeyTree | null;
-}
-
-interface IMerkleObjectField {
-    key: string;
-    value: TPrimitiveType | MerkalizedDocument;
-    valueHash: Hash,
-    keyValueHash: Hash,
-}
-
-type TMerkleObject = IMerkleObjectField[];
-
+// a document that was transformed into a Merkle tree form
+// immutable - create a new one, for new data
 export class MerkalizedDocument {
-    private _rootHash: Hash;
+    private _rootHash: THash;
     private _merkleObj: TMerkleObject;
 
+    // creates a merkalized document from regular `IDocument`
+    // nested `IDocument`'s are transformed into nested `MerkalizedDocument`'s
     static async fromObject(document: IDocument): Promise<MerkalizedDocument> {
         const it = new MerkalizedDocument(document);
         const result = await MerkalizedDocument.merkalize(document);
@@ -158,7 +50,7 @@ export class MerkalizedDocument {
         return this._merkleObj.find(it => it.key === key)?.value;
     }
 
-    rootHash(): Hash {
+    rootHash(): THash {
         return this._rootHash;
     }
 
@@ -166,7 +58,13 @@ export class MerkalizedDocument {
         return this._document;
     }
 
-    witness(keyTree: IKeyTree | null): HashTree {
+    // creates a partial disclosure of merkle tree leafs in `HashTree` format
+    // if `null` is provided as an argument, returns `HashTree::pruned(rootHash)`
+    // supports nested documents
+    // 
+    // having a document `{a: 10, b: 20, c: 30}`, expects a request in form `{a: null, c: null}`, to reveal fields `a` and `c`
+    // having a document `{a: {b: c: "test"}}`, expects a request in form `{a: {b: {c: null}}}`, to reveal the field `c` 
+    witness(keyTree: IProofRequest | null): HashTree {
         if (keyTree === null) {
             return HashTree.pruned(this._rootHash);
         }
@@ -200,7 +98,7 @@ export class MerkalizedDocument {
 
     private constructor(private _document: IDocument) { }
 
-    private static async merkalize(document: IDocument): Promise<[Hash, TMerkleObject] | null> {
+    private static async merkalize(document: IDocument): Promise<[THash, TMerkleObject] | null> {
         const sortedKeys = Object.keys(document).sort();
 
         if (sortedKeys.length == 0) {
@@ -209,13 +107,13 @@ export class MerkalizedDocument {
 
         const result: TMerkleObject = [];
 
-        let rootHash: Hash | null = null;
+        let rootHash: THash | null = null;
 
         for (let i = 0; i < sortedKeys.length; i++) {
             const key = sortedKeys[i];
             const value = document[key];
 
-            let valueHash: Hash, v: TPrimitiveType | MerkalizedDocument;
+            let valueHash: THash, v: TPrimitiveType | MerkalizedDocument;
             if (!PRIMITIVE_TYPES.includes(typeof value)) {
                 v = await MerkalizedDocument.fromObject(value as IDocument);
 
@@ -247,26 +145,26 @@ export class MerkalizedDocument {
             result.push(node);
         }
 
-        return [rootHash as Hash, result];
+        return [rootHash as THash, result];
     }
 }
 
+interface IMerkleObjectField {
+    key: string;
+    value: TPrimitiveType | MerkalizedDocument;
+    valueHash: THash,
+    keyValueHash: THash,
+}
+
+type TMerkleObject = IMerkleObjectField[];
+
+export interface IProofRequest {
+    [key: string]: IProofRequest | null;
+}
+
 export interface IDocumentProof {
-    witness: HashTree,
+    witness: string,
     signatureHex: string,
-}
-
-export function proofToJSON(proof: IDocumentProof): string {
-    return JSON.stringify({ witness: proof.witness.toJSON(), signatureHex: proof.signatureHex })
-}
-
-export function JSONToProof(json: string): IDocumentProof {
-    const p = JSON.parse(json);
-
-    return {
-        witness: HashTree.fromJSON(p.witness),
-        signatureHex: p.signatureHex,
-    };
 }
 
 type HashTreeType = 'Empty' | 'Fork' | 'Labeled' | 'Leaf' | 'Pruned';
@@ -274,18 +172,20 @@ type HashTreePayloadEmpty = null;
 type HashTreePayloadFork = [HashTree, HashTree];
 type HashTreePayloadLabeled = [string, HashTree];
 type HashTreePayloadLeaf = TPrimitiveType;
-type HashTreePayloadPruned = Hash;
+type HashTreePayloadPruned = THash;
 type HashTreePayload = HashTreePayloadEmpty | HashTreePayloadFork | HashTreePayloadLabeled | HashTreePayloadLeaf | HashTreePayloadPruned;
 
-export interface IHashTreeObject {
+interface IHashTreeObject {
     type: HashTreeType,
     payload: null | string | string[],
 }
 
+// witness (partial disclosure) objects compatible with ic-asset-canister (only structure-wise -- the encoding is incompatible!!!)
 export class HashTree {
     private _payload: HashTreePayload;
     private constructor(private _type: HashTreeType) { }
 
+    // serializes the witness into JSON string
     toJSON(): string {
         const obj: IHashTreeObject = { type: this._type, payload: null };
 
@@ -310,13 +210,14 @@ export class HashTree {
 
             case "Pruned":
                 const p = this._payload as HashTreePayloadPruned;
-                obj.payload = hexEncode(new Uint8Array(p));
+                obj.payload = bytesToHex(new Uint8Array(p));
                 break;
         }
 
         return JSON.stringify(obj);
     }
 
+    // deserializes a witness from JSON string
     static fromJSON(json: string): HashTree {
         const obj: IHashTreeObject = JSON.parse(json);
 
@@ -345,11 +246,12 @@ export class HashTree {
             case "Pruned": {
                 const p = obj.payload as string;
 
-                return HashTree.pruned(hexDecode(p))
+                return HashTree.pruned(hexToBytes(p))
             }
         }
     }
 
+    // transforms the partial disclose into regular `IDocument`, producing a subset of fields of the original document
     toDocument(): IDocument {
         const res = this.gatherDocumentFields() as IDocument;
 
@@ -358,6 +260,13 @@ export class HashTree {
         }
 
         return res;
+    }
+
+    static fromObj(obj: any): HashTree {
+        const it = new HashTree('Empty');
+        Object.assign(it, obj);
+
+        return it;
     }
 
     private gatherDocumentFields(): IDocument | TPrimitiveType | {} {
@@ -396,7 +305,9 @@ export class HashTree {
         }
     }
 
-    async reconstruct(): Promise<Hash> {
+    // computes the root hash of the partial disclosure
+    // should be the same as in the original `MerkalizedDocument`
+    async reconstruct(): Promise<THash> {
         switch (this._type) {
             case "Empty":
                 return emptyHash();
@@ -447,7 +358,7 @@ export class HashTree {
         return it;
     }
 
-    static pruned(hash: Hash): HashTree {
+    static pruned(hash: THash): HashTree {
         const it = new HashTree('Pruned');
         it._payload = hash;
 
@@ -455,35 +366,100 @@ export class HashTree {
     }
 }
 
-export async function aesGcmEncrypt(message: ArrayBuffer, rawKey: BufferSource): Promise<Uint8Array> {
-    // 96-bits; unique per message
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const aesKey = await window.crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt"]);
+const FORK_DOMAIN = domainSep('ic-hashtree-fork');
+const LEAF_DOMAIN = domainSep('ic-hashtree-leaf');
+const LABELED_DOMAIN = domainSep('ic-hashtree-labeled');
+const EMPTY_DOMAIN = domainSep('ic-hashtree-empty');
 
-    const ciphertextBuffer = await window.crypto.subtle.encrypt(
-        { name: "AES-GCM", iv: iv },
-        aesKey,
-        message,
-    );
-    const ciphertext = new Uint8Array(ciphertextBuffer);
-    var ivAndCiphertext = new Uint8Array(iv.length + ciphertext.length);
-    ivAndCiphertext.set(iv, 0);
-    ivAndCiphertext.set(ciphertext, iv.length);
-
-    return ivAndCiphertext;
+function domainSep(domain: string): ArrayBuffer {
+    return new Uint8Array([domain.length, ...strToBytes(domain)]);
 }
 
-export async function aesGcmDecrypt(ivAndCiphertext: Uint8Array, rawKey: BufferSource): Promise<ArrayBuffer> {
-    // 96-bits; unique per message
-    const iv = ivAndCiphertext.subarray(0, 12);
-    const ciphertext = ivAndCiphertext.subarray(12);
-    const aesKey = await window.crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
+async function forkHash(l: THash, r: THash): Promise<THash> {
+    const buf = new Blob([FORK_DOMAIN, l, r]);
 
-    let decrypted = await window.crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: iv },
-        aesKey,
-        ciphertext
-    );
+    return sha256(await buf.arrayBuffer());
+}
 
-    return decrypted;
+async function leafHash(leaf: TPrimitiveType): Promise<THash> {
+    const buf = new Blob([LEAF_DOMAIN, primitiveToBytes(leaf)])
+
+    return sha256(await buf.arrayBuffer());
+}
+
+async function labeledHash(label: string, contentHash: THash): Promise<THash> {
+    const buf = new Blob([LABELED_DOMAIN, strToBytes(label), contentHash]);
+
+    return sha256(await buf.arrayBuffer());
+}
+
+async function emptyHash(): Promise<THash> {
+    return sha256(EMPTY_DOMAIN);
+}
+
+// computes sha256 hash over a provided byte array
+export async function sha256(data: ArrayBuffer | Uint8Array): Promise<THash> {
+    try {
+        return crypto.subtle.digest('SHA-256', data);
+    } catch (e) {
+        throw new Error("Your device doesn't support cryptography API! Try upgrading your browser.");
+    }
+}
+
+// Verifies if the document was produced by following the provided schema
+// TODO: only works for single level documents
+export function verifyDocumentSchema(document: IDocument, schema: IDocumentSchema): boolean {
+    const fieldsDoc = Object.keys(document).sort();
+    const fieldsSchema = Object.keys(schema.content);
+
+    if (fieldsDoc.length !== fieldsSchema.length) {
+        return false;
+    }
+
+    for (let key of fieldsDoc) {
+        if (schema.content[key] === undefined) {
+            return false
+        }
+
+        if (schema.content[key].constraints.type !== typeof document[key]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Verify if the proof request is intended to be used against the provided document
+// TODO: only works for single level documents
+export function verifyDocumentRequest(document: IDocument, request: IProofRequest): boolean {
+    for (let key of Object.keys(request)) {
+        if (!document.hasOwnProperty(key)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// verifies that the proof was indeed produced following the specified proof request
+// and that the proof is signed by the `Krakozhia Passport Service`
+// if true, returns the requested fields of the proven document
+// if false, returns null
+export const verifyDocumentProof = async (proof: IDocumentProof, proofRequest: IProofRequest): Promise<IDocument | null> => {
+    const witness = HashTree.fromJSON(proof.witness);
+    const gatheredFields = witness.toDocument();
+
+    if (!verifyDocumentRequest(gatheredFields, proofRequest.keys)) {
+        return null;
+    }
+
+    const rootHash = await witness.reconstruct();
+    const signature = Signature.from(proof.signatureHex);
+    const pubkey = SigningKey.recoverPublicKey(new Uint8Array(rootHash), signature);
+
+    if (pubkey !== krakozhiaPassportService.signingKey.publicKey) {
+        return null;
+    }
+
+    return gatheredFields;
 }

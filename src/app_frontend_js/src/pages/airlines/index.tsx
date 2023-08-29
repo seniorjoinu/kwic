@@ -1,11 +1,14 @@
 import { createEffect, createSignal, onMount } from "solid-js";
 import { IShareDataRequest } from "../share-request";
-import { JSONToProof } from "../../utils/crypto";
-import { Signature, SigningKey } from "ethers";
-import { calculateAge, krakozhiaWitness, now, toDateString, verifyDocumentRequest } from "../../data";
-import bg from '../../../assets/airport.jpg';
-import logo from '../../../assets/air-log.png';
+import { JSONToProof } from "../../utils/encode";
+import bg from '../../../assets/airport.png';
+import logo from '../../../assets/logo.svg';
+import checkmark from '../../../assets/check.svg';
+import ticketsPng from '../../../assets/tickets.png';
 import './index.scss';
+import { IDocumentProof, verifyDocumentProof } from "../../utils/crypto/merkalized-documents";
+import { calculateAge, now, toDateString } from "../../utils/time";
+import { IKwicMessage, filterKwicMessage } from "../../utils/data/messages";
 
 const shareRequest: IShareDataRequest = {
     keys: {
@@ -23,73 +26,51 @@ export interface IPassportFields {
 
 export function AirlinesPage() {
     const [blocked, setBlocked] = createSignal(false);
-    const [msg, setMsg] = createSignal<MessageEvent | null>(null);
     const [fields, setFields] = createSignal<IPassportFields | null>(null);
+    const [modalVisible, setModalVisible] = createSignal(false);
 
     onMount(() => {
         document.title = "Krakozhia Airlines";
-    })
+    });
 
     const handleBtn = () => {
         const f = fields();
 
         if (f) {
-            alert("Your tickets are ready! Have a great flight!");
+            setModalVisible(true);
             return;
         }
 
         setBlocked(true);
-        const w = window.open('http://kwic.localhost:3000/request', "_blank");
+        const w = window.open('/request', "_blank");
 
         if (w === null) {
             throw new Error("Something went wrong");
         }
 
-        window.addEventListener("message", setMsg);
-        w.addEventListener("message", setMsg);
+        window.addEventListener("message", handleMessage);
 
-        const message = JSON.stringify(shareRequest);
+        const msg: IKwicMessage = {
+            domain: 'kwic',
+            type: 'proofRequest',
+            payload: shareRequest
+        };
 
-        setTimeout(() => {
-            w.postMessage(message, "*");
-
-            console.log("message sent", message);
-        }, 1000);
+        setTimeout(() => w.postMessage(msg), 1000);
     };
 
-    createEffect(() => {
-        handleMessage(msg())
-    }, msg());
-
     const handleMessage = async (e: MessageEvent | null) => {
-        if (!e || e.origin !== 'http://kwic.localhost:3000') {
+        const proofMsg = filterKwicMessage(e, 'proof');
+
+        if (!proofMsg) {
             return;
         }
 
-        console.log('message received', e);
-
-        const proof = JSONToProof(e.data);
-        const gatheredFields = proof.witness.toDocument();
-
-        console.log('gathered fields', gatheredFields);
-
-        if (!verifyDocumentRequest(gatheredFields, shareRequest.keys)) {
-            throw new Error("Invalid document");
-        }
-
-        const rootHash = await proof.witness.reconstruct();
-        const signature = Signature.from(proof.signatureHex);
-        const pubkey = SigningKey.recoverPublicKey(new Uint8Array(rootHash), signature);
-
-        if (pubkey !== krakozhiaWitness().signingKey.publicKey) {
-            throw new Error("Invalid signature");
-        }
-
-        console.log("Signature verified!");
-
+        const proof = proofMsg.payload as IDocumentProof;
         // @ts-expect-error
-        setFields(gatheredFields as IPassportFields);
+        const fields = (await verifyDocumentProof(proof, shareRequest)) as unknown as IPassportFields;
 
+        setFields(fields);
         setBlocked(false);
     };
 
@@ -103,23 +84,27 @@ export function AirlinesPage() {
                 <div class="passenger">
                     <h2>Passenger</h2>
 
-                    <div class="field">
-                        <h4>First name</h4>
-                        <span>{f.firstName}</span>
+                    <div class="fields">
+                        <div class="field">
+                            <h4>First name</h4>
+                            <span>{f.firstName}</span>
+                        </div>
+
+                        <div class="field">
+                            <h4>Last name</h4>
+                            <span>{f.lastName}</span>
+                        </div>
+
+                        <div class="field">
+                            <h4>Date of birth</h4>
+                            <span>{toDateString(new Date(f.dateOfBirth))} ({calculateAge(f.dateOfBirth, now.getTime())} years)</span>
+                        </div>
                     </div>
 
-                    <div class="field">
-                        <h4>Last name</h4>
-                        <span>{f.lastName}</span>
-                    </div>
-
-                    <div class="field">
-                        <h4>Date of birth</h4>
-                        <span>{toDateString(new Date(f.dateOfBirth))} ({calculateAge(f.dateOfBirth, now.getTime())} years)</span>
-                    </div>
+                    <div class="divider" />
 
                     <div class="verified">
-                        <p><span>✔</span> Signature verified</p>
+                        <img src={checkmark} /> <p>Signature verified</p>
                     </div>
                 </div>
             )
@@ -127,58 +112,65 @@ export function AirlinesPage() {
     }
 
     const btn = () => {
-        return <button disabled={blocked()} onClick={handleBtn}>Book tickets</button>;
+        return <button disabled={blocked()} onClick={handleBtn}>Book Tickets</button>;
+    }
+
+    const modal = () => {
+        if (modalVisible()) {
+            return (
+                <div class="modal-wrapper">
+                    <div class="modal">
+                        <img src={checkmark} />
+                        <div class="text">
+                            <h3><span>Your tickets are ready</span></h3>
+                            <p>Have a safe flight!</p>
+                        </div>
+                    </div>
+                </div>
+            )
+        } else {
+            return undefined;
+        }
     }
 
     return (
-        <main class="airlines" style={{ "background-image": `url(${bg})` }}>
+        <main class="airlines">
             <img class="logo" src={logo} />
-            <div class="route">
-                <div class="city">
-                    <span>Departure</span>
-                    <select>
-                        <option selected value="hml">Homel (HML)</option>
-                    </select>
+
+            <div class="form">
+                <div class="route">
+                    <div class="waypoint from">
+                        <span>Departure</span>
+                        <div class="input"><span class="city">Homel</span><span class="airport">HML</span></div>
+                    </div>
+                    <div class="waypoint to">
+                        <span>Destination</span>
+                        <div class="input"><span class="city">New York</span><span class="airport">JFK</span></div>
+                    </div>
                 </div>
-                <span class="arrow">→</span>
-                <div class="city">
-                    <span>Destination</span>
-                    <select>
-                        <option selected value="hml">New York (JFK)</option>
-                    </select>
+
+                <div class="controls">
+                    <div class="field date">
+                        <span>Date</span>
+                        <div class="input">18 June 2004</div>
+                    </div>
+                    <div class="field time">
+                        <span>Time</span>
+                        <div class="input">12:00</div>
+                    </div>
+                    <div class="field seat">
+                        <span>Seat</span>
+                        <div class="input">57A</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="controls">
-                <div class="date">
-                    <span>Date</span>
-                    <div class="form">
-                        <select>
-                            <option selected value="day">18 June 2004</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="time">
-                    <span>Time</span>
-                    <div class="form">
-                        <select>
-                            <option selected value="hours">12:00</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="seat">
-                    <span>Seat</span>
-                    <div class="form">
-                        <select>
-                            <option selected value="seat">57A</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
 
             {btn()}
 
             {passenger()}
+
+            {modal()}
         </main>
     );
 }

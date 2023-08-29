@@ -1,9 +1,15 @@
 import { Signature } from "ethers";
-import { IDocument, IDocumentSchema, ISchemaField, ISignedDocument, TPrimitiveType, krakozhiaWitness } from "../../data";
 import { storeDocument } from "../../api";
 import { createSignal } from "solid-js";
 import { parentWindow, shareDataRequest } from "../../pages/share-request";
-import { IDocumentProof, MerkalizedDocument, proofToJSON } from "../../utils/crypto";
+import { IDocumentProof, MerkalizedDocument } from "../../utils/crypto";
+import "./index.scss";
+import documentIcon from '../../../assets/document.svg';
+import checkIcon from '../../../assets/check.svg';
+import smallCheckIcon from '../../../assets/check-1.svg';
+import { useNavigate } from "@solidjs/router";
+import { IKwicMessage } from "../../utils/data/messages";
+import { IDocument, IDocumentSchema, ISchemaField, ISignedDocument, TPrimitiveType, krakozhiaSigner } from "../../utils/data";
 
 export interface IDigitalDocumentFieldProps {
     name: string,
@@ -19,7 +25,6 @@ export function DigitalDocumentField(props: IDigitalDocumentFieldProps) {
             break;
 
         case "number":
-        case "bigint":
             value = props.value.toString();
             break;
 
@@ -49,6 +54,7 @@ export interface IDigitalDocumentProps {
 export function DigitalDocument(props: IDigitalDocumentProps) {
     const [blocked, setBlocked] = createSignal(false);
     const [saved, setSaved] = createSignal(false);
+    const navigate = useNavigate();
 
     const fields = Object.keys(props.document.document).map(key => {
         const p: IDigitalDocumentFieldProps = {
@@ -60,12 +66,16 @@ export function DigitalDocument(props: IDigitalDocumentProps) {
         return <DigitalDocumentField {...p} />
     });
 
-    const handleBtn = async () => {
+    const handleSave = async () => {
         setBlocked(true);
         await storeDocument(props.document);
         setBlocked(false);
         setSaved(true);
     };
+
+    const handleBack = () => {
+        navigate("/my-documents");
+    }
 
     const handleUse = async () => {
         if (shareDataRequest === null || parentWindow === null) {
@@ -78,34 +88,42 @@ export function DigitalDocument(props: IDigitalDocumentProps) {
         const witness = merkalizedDocument.witness(shareDataRequest.keys);
 
         const proof: IDocumentProof = {
-            witness,
+            witness: witness.toJSON(),
             signatureHex: props.document.signatureHex,
         };
 
-        parentWindow.postMessage(proofToJSON(proof), { targetOrigin: document.referrer });
+        const msg: IKwicMessage = {
+            domain: 'kwic',
+            type: 'proof',
+            payload: proof
+        };
+
+        parentWindow.postMessage(msg);
 
         setTimeout(() => window.close(), 1000);
     }
 
     const btnOrStatus = () => {
         if (props.variant == 'list') {
-            return <button disabled={blocked()} onClick={handleUse}>Use</button>
+            return <button class="btn full" disabled={blocked()} onClick={handleUse}>Use</button>
         }
 
         if (saved()) {
-            return <h6>Document saved!</h6>;
+            return <h6><span>Document saved <img src={smallCheckIcon} /></span> <button class="btn small" onClick={handleBack}>Back to My Documents</button> </h6>;
         } else {
-            return <button disabled={blocked()} onClick={handleBtn}>Save</button>;
+            return <button class="btn full" disabled={blocked()} onClick={handleSave}>Save to My Documents</button>;
         }
     };
 
+    const classNames = props.variant == "chat" ? "document margintop" : "document standalone";
+
     return (
-        <div>
-            <h4>{props.schema.schemaName}</h4>
-            <ul>
+        <div class={classNames}>
+            <h4 class="name"><img src={documentIcon} />{props.schema.schemaName}</h4>
+            <ul class="fields">
                 {fields}
             </ul>
-            <div>Signed by {krakozhiaWitness().name}</div>
+            <div class="verified" ><img src={checkIcon} /> Signed by: <span>{krakozhiaSigner.name}</span></div>
             {btnOrStatus()}
         </div>
     );

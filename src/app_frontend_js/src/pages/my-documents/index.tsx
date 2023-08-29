@@ -1,33 +1,42 @@
-import { createResource } from "solid-js";
+import { createResource, onMount } from "solid-js";
 import { listMyDocuments } from "../../api";
 import { DigitalDocument, IDigitalDocumentProps } from "../../components/DigitalDocument";
-import { krakozhiaPassportSchema } from "../../data";
 import { useNavigate } from "@solidjs/router";
 import { Header } from "../../components/Header/header";
 import "./index.scss";
+import documentIcon from '../../../assets/document.svg';
+import plusIcon from '../../../assets/plus.svg';
+import { krakozhiaPassportSchema } from "../../utils/data";
 
 export const MyDocumentsPage = () => {
     const [documents] = createResource(listMyDocuments);
     const navigate = useNavigate();
+    const noDocs = () => {
+        return (!documents() || documents().length == 0);
+    }
+
+    onMount(() => {
+        document.title = "Kwic";
+    });
 
     const handleBtnClick = () => {
-
         navigate("/chat");
     }
 
     const body = () => {
         const docs = documents();
 
-        if (!docs || docs.length == 0) {
-            return (
-                <>
-                    <h4>You don't have any verified documents</h4>
-                    <button onClick={handleBtnClick}>Request a document</button>
-                </>
-            )
-        }
+        const btn = (
+            <button onClick={handleBtnClick}>
+                <div>
+                    <img src={documentIcon} />
+                    <span>Request a new document</span>
+                </div>
+                <img class="plus" src={plusIcon} />
+            </button>
+        );
 
-        const docElems = docs.map(it => {
+        const docElems = docs && docs.map(it => {
             const document = it;
             const schema = krakozhiaPassportSchema();
             const props: IDigitalDocumentProps = {
@@ -39,14 +48,29 @@ export const MyDocumentsPage = () => {
             return <DigitalDocument {...props} />
         });
 
-        return <ul>{docElems}</ul>;
+        return (
+            <>
+                <ul class="documents">{docElems}</ul>
+                {btn}
+            </>
+        );
     };
+
+    const title = () => noDocs() ? "My Documents" : `My Documents (${documents().length})`;
+    const subtitle = () => noDocs() ? "You don't have any documents yet" : "Select a document you wan to authorize with";
 
     return (
         <main class="my-documents">
+            <div class="bg" />
             <Header />
-            <h2>My Documents</h2>
-            {body()}
+
+            <div class="modal">
+                <div class="title">
+                    <h2>{title()}</h2>
+                    <p>{subtitle()}</p>
+                </div>
+                {body()}
+            </div>
         </main>
     )
 }

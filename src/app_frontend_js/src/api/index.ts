@@ -2,23 +2,21 @@ import { ActorSubclass, HttpAgent, Actor, Identity } from '@dfinity/agent';
 import type { _SERVICE as BackendService } from 'declarations/app_backend.did';
 // @ts-expect-error
 import { idlFactory } from 'declarations/app_backend.did';
-import { BrowserProvider, keccak256, ethers } from 'ethers';
+import { BrowserProvider, keccak256, ethers, computeAddress, id, recoverAddress, hashMessage } from 'ethers';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
 import * as vetkd from 'vetkd';
 import { aesGcmDecrypt, aesGcmEncrypt } from '../utils/crypto';
-import { ISignedDocument } from '../data';
-import { hexDecode, hexEncode } from '../utils/encode';
+import { bytesToHex, bytesToStr, hexToBytes, strToBytes } from '../utils/encode';
+import { ISignedDocument } from '../utils/data';
+import { clearAesKey, clearMetamaskAddress, retrieveAesKey, retrieveIcIdentity, retrieveMetamaskAddress, storeAesKey, storeIcIdentity, storeMetamaskAddress } from '../utils/local-storage';
 
-export const WITNESS_PRIVKEY_HEX = '0x0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a';
-export const WITNESS_PUBKEY_HEX = '0x04f76a39d05686e34a4420897e359371836145dd3973e3982568b60f8433adde6eb61f3694eae50e3815d4ed3068d5892f2571dc8f654271535e23b513dea6cbe3';
+
 
 // @ts-expect-error
 const provider = new BrowserProvider(window.ethereum);
 const backendCanisterId: string = import.meta.env.VITE_CANISTER_ID_APP_BACKEND;
-const icAgent = new HttpAgent({ identity: getIdentity(), host: 'http://localhost:40037' });
+const icAgent = new HttpAgent({ identity: getIdentity(), host: 'http://localhost:39395' });
 const backend: ActorSubclass<BackendService> = createActor(backendCanisterId, icAgent);
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
 
 export let isAuthorized = false;
 export let aesRawKey: Uint8Array | null = null;
@@ -28,84 +26,105 @@ export let aesRawKey: Uint8Array | null = null;
 // this one is also fine from security POW though
 export let metamaskAddress: Uint8Array | null = null;
 
-export async function authorize() {
+export function logout() {
+    isAuthorized = false;
+    aesRawKey = null;
+    metamaskAddress = null;
+
+    clearAesKey();
+    clearMetamaskAddress();
+    clearMetamaskAddress();
+
+    window.location.reload();
+}
+
+export async function login() {
     if (isAuthorized) {
         return;
     }
 
-    const keyAes = "kwic-aes-key";
-    const keyAddress = "kwic-metamask-addr";
-    const prevAesKey = localStorage.getItem(keyAes);
-    const prevAddress = localStorage.getItem(keyAddress);
+    const prevAesKey = retrieveAesKey();
+    const prevAddress = retrieveMetamaskAddress();
 
     if (prevAesKey == null || prevAddress == null) {
         console.log("Previous authorization not found, creating a new one");
 
-        await provider.send('eth_requestAccounts', []);
+        const addrs = await provider.send('eth_requestAccounts', []);
+        console.log('their addr:', addrs[0]);
 
-        const signer = await provider.getSigner();
-        const principal = await icAgent.getPrincipal();
-
-        const principalHash = hexDecode(keccak256(principal.toUint8Array()).replace('0x', ''));
-        const hexSignature = await signer.signMessage(principalHash);
-        const signature = hexDecode(hexSignature.slice(2));
-        const pubkeyHash = keccak256(hexDecode(ethers.SigningKey.recoverPublicKey(principalHash, hexSignature).replace('0x', '')));
+        const [signature, address] = await signSessionPrincipalAndDeriveAddress(addrs[0]);
 
         await backend.authorize(signature);
 
-        metamaskAddress = hexDecode(pubkeyHash.replace('0x', '')).slice(12);
+        metamaskAddress = address;
         aesRawKey = await getAes256GcmKey();
 
-        localStorage.setItem(keyAes, hexEncode(aesRawKey));
-        localStorage.setItem(keyAddress, hexEncode(metamaskAddress));
+        storeAesKey(aesRawKey);
+        storeMetamaskAddress(metamaskAddress);
     } else {
         console.log("Found previous authorization");
 
-        metamaskAddress = hexDecode(prevAddress);
-        aesRawKey = hexDecode(prevAesKey);
+        metamaskAddress = prevAddress;
+        aesRawKey = prevAesKey;
     }
 
     isAuthorized = true;
     console.log("Authorization success! Encryption key is ready.");
 }
 
+async function signSessionPrincipalAndDeriveAddress(signerAddress: string): Promise<[Uint8Array, Uint8Array]> {
+    const signer = await provider.getSigner(signerAddress);
+    const principal = await icAgent.getPrincipal();
+
+    const msg = `Log in as ${principal.toText()}`;
+
+    const hexPrincipalHash: string = hashMessage(msg);
+    const hexSignature: string = await signer.signMessage(msg);
+    const hexPubkey: string = ethers.SigningKey.recoverPublicKey(hexPrincipalHash, hexSignature);
+
+    const hexPubkeyHash: string = keccak256(hexToBytes(hexPubkey.slice(4)));
+    const signature = hexToBytes(hexSignature.slice(2));
+    const metamaskAddr = hexToBytes(hexPubkeyHash.slice(2)).slice(12);
+
+    return [signature, metamaskAddr];
+}
+
 function getIdentity(): Identity {
-    const key = "kwic-identity";
-    const prevIdentity = localStorage.getItem(key);
+    const prevIdentity = retrieveIcIdentity();
 
     if (prevIdentity !== null) {
         console.log("Previous identity found.")
 
-        return Ed25519KeyIdentity.fromJSON(prevIdentity);
+        return prevIdentity;
     }
 
     console.log("Previous identity not found, creating a new one");
 
     const identity = Ed25519KeyIdentity.generate();
-    localStorage.setItem(key, JSON.stringify(identity.toJSON()));
+    storeIcIdentity(identity);
 
     return identity;
 }
 
 export async function storeDocument(document: ISignedDocument) {
     if (aesRawKey == null) {
-        await authorize();
+        await login();
     }
 
-    const docBytes = await aesGcmEncrypt(textEncoder.encode(JSON.stringify(document)), aesRawKey!);
+    const docBytes = await aesGcmEncrypt(strToBytes(JSON.stringify(document)), aesRawKey!);
 
     await backend.store_encrypted_document(docBytes);
 }
 
 export async function listMyDocuments(): Promise<ISignedDocument[]> {
     if (aesRawKey == null) {
-        await authorize();
+        await login();
     }
 
     const encryptedDocuments: Uint8Array[] = (await backend.list_my_documents()) as Uint8Array[];
     const decryptedDocuments = await Promise.all(encryptedDocuments.map(it => aesGcmDecrypt(it, aesRawKey!)));
 
-    return decryptedDocuments.map(it => JSON.parse(textDecoder.decode(it)));
+    return decryptedDocuments.map(it => JSON.parse(bytesToStr(new Uint8Array(it))));
 }
 
 export async function getAes256GcmKey() {

@@ -1,13 +1,16 @@
-import { createEffect, createSignal } from "solid-js";
-import { krakozhiaPassportSchema } from "../../data";
+import { createEffect, createSignal, onMount } from "solid-js";
 import { createEventSignal } from "@solid-primitives/event-listener";
-import { IKeyTree } from "../../utils/crypto";
 import { useNavigate } from "@solidjs/router";
 import "./index.scss";
-import { authorize } from "../../api";
+import documentIcon from '../../../assets/document.svg';
+import { login } from "../../api";
+import { Header } from "../../components/Header/header";
+import { IProofRequest } from "../../utils/crypto";
+import { krakozhiaPassportSchema } from "../../utils/data";
+import { filterKwicMessage } from "../../utils/data/messages";
 
 export interface IShareDataRequest {
-    keys: IKeyTree;
+    keys: IProofRequest;
 }
 
 export let shareDataRequest: IShareDataRequest | null = null;
@@ -17,12 +20,15 @@ function ShareRequest(props: IShareDataRequest) {
     let keys = Object.keys(props.keys).map(key => <li>{krakozhiaPassportSchema().content[key].name}</li>);
 
     return (
-        <div class="request">
-            <ul>
+        <>
+            <ul class="fields">
                 {keys}
             </ul>
-            <p>from "<span>{krakozhiaPassportSchema().schemaName}</span>" document</p>
-        </div>
+            <div class="from">
+                <h4>From</h4>
+                <p><img src={documentIcon} />{krakozhiaPassportSchema().schemaName}</p>
+            </div>
+        </>
     )
 }
 
@@ -32,44 +38,51 @@ export function ShareRequestPage() {
     const navigate = useNavigate();
     const [wait, setWait] = createSignal(false);
 
+    const disabled = () => !request() || wait();
+
+    onMount(() => {
+        document.title = "Kwic";
+    });
+
     createEffect(() => {
         const msg = message();
 
-        if (!msg) {
+        const proofRequestMsg = filterKwicMessage(msg, 'proofRequest');
+
+        if (!proofRequestMsg) {
             return;
         }
 
-        const msgUrl = new URL(msg.origin);
-        const referrerUrl = new URL(document.referrer);
-
-        if (msgUrl.host !== referrerUrl.host) {
-            return;
-        }
-
-        shareDataRequest = JSON.parse(msg.data);
         parentWindow = msg.source;
 
+        shareDataRequest = proofRequestMsg.payload as IShareDataRequest;
         setRequest(shareDataRequest);
     }, message());
 
     const handleBtnClick = async () => {
         setWait(true);
-        await authorize();
+        await login();
         setWait(false);
 
         navigate("/my-documents");
     };
 
+    const btn = () => {
+        const text = disabled() ? "Wait" : "Continue";
+
+        return (
+            <button disabled={disabled()} onClick={handleBtnClick}>{text}</button>
+        )
+    }
+
     const body = () => {
         if (document.referrer) {
-            const referrer = new URL(document.referrer);
-
             return (
-                <>
-                    <h2>Website <span>{referrer.host}</span> wants to know your:</h2>
+                <div class="modal">
+                    <h2><span>Krakozhia Airlines</span> Wants to know your:</h2>
                     {request() && <ShareRequest {...request()!} />}
-                    <button disabled={wait()} onClick={handleBtnClick}>Continue</button>
-                </>
+                    {btn()}
+                </div>
             );
         } else {
             return <h2>404</h2>;
@@ -77,7 +90,9 @@ export function ShareRequestPage() {
     }
 
     return (
-        <main style={{ cursor: wait() ? "wait" : "default" }} class="share-request">
+        <main style={{ cursor: disabled() ? "wait" : "default" }} class="share-request">
+            <div class="bg" />
+            <Header />
             {body()}
         </main>
     );

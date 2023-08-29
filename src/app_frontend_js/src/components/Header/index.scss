@@ -1,14 +1,63 @@
 .header {
-    position: absolute;
-    top: 0;
-    left: 0;
-
     width: 100%;
-    background-color: lightblue;
-
-    text-align: end;
-    color: #2F2F2F;
-    padding: 20px 50px;
+    height: 80px;
 
     box-sizing: border-box;
+
+    display: flex;
+    padding: 15px 15px 15px 40px;
+    justify-content: space-between;
+    align-items: center;
+
+    background: #1F1F1F;
+
+    .authorized {
+        display: flex;
+        align-items: center;
+        gap: 40px;
+
+        p {
+            margin: 0;
+
+            color: rgba(255, 255, 255, 0.60);
+            text-overflow: ellipsis;
+            font-family: Poppins;
+            font-size: 16px;
+            font-style: normal;
+            font-weight: 400;
+            line-height: normal;
+        }
+
+        button {
+            display: flex;
+            height: 50px;
+            padding: 15px 30px 15px 25px;
+            align-items: center;
+            gap: 10px;
+
+            border-radius: 100px;
+            border: none;
+            background: #476FFE;
+
+            cursor: pointer;
+
+            span {
+                overflow: hidden;
+                color: #FFF;
+                text-overflow: ellipsis;
+                font-family: Poppins;
+                font-size: 16px;
+                font-style: normal;
+                font-weight: 500;
+                line-height: normal;
+            }
+
+            img {
+                width: 22.5px;
+                height: 20px;
+                stroke-width: 1.5px;
+                stroke: #FFF;
+            }
+        }
+    }
 }
