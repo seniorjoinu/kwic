@@ -10,4 +10,4 @@ for (let line of canisterIdLines) {
     file.push([`VITE_${line[0]}`, line[1]]);
 }
 
-fs.writeFileSync('./src/app_fronend_js/.env', file.map(it => it.join('=')).join('\n'));
+fs.writeFileSync('./src/app_frontend_js/.env', file.map(it => it.join('=')).join('\n'));
