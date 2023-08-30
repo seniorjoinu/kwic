@@ -1,3 +1,5 @@
+import { BACKEND_CANISTER_ID, CLIENT_BIND_HOST } from '../utils/config';
+
 import { ActorSubclass, HttpAgent, Actor, Identity } from '@dfinity/agent';
 import type { _SERVICE as BackendService } from 'declarations/app_backend.did';
 // @ts-expect-error
@@ -11,19 +13,13 @@ import { ISignedDocument } from '../utils/data';
 import { clearAesKey, clearMetamaskAddress, retrieveAesKey, retrieveIcIdentity, retrieveMetamaskAddress, storeAesKey, storeIcIdentity, storeMetamaskAddress } from '../utils/local-storage';
 
 
-
 // @ts-expect-error
 const provider = new BrowserProvider(window.ethereum);
-const backendCanisterId: string = import.meta.env.VITE_CANISTER_ID_APP_BACKEND;
-const icAgent = new HttpAgent({ identity: getIdentity(), host: 'http://localhost:39395' });
-const backend: ActorSubclass<BackendService> = createActor(backendCanisterId, icAgent);
+const icAgent = new HttpAgent({ identity: getIdentity(), host: CLIENT_BIND_HOST });
+const backend: ActorSubclass<BackendService> = createActor(BACKEND_CANISTER_ID, icAgent);
 
 export let isAuthorized = false;
 export let aesRawKey: Uint8Array | null = null;
-// this address is calculated in a not compatible with metamask way, 
-// so it won't be the same as the one metamask shows us
-// I was unable to find a rust library that compiles to wasm and produces correct addresses form pubkeys
-// this one is also fine from security POW though
 export let metamaskAddress: Uint8Array | null = null;
 
 export function logout() {
@@ -80,13 +76,9 @@ async function signSessionPrincipalAndDeriveAddress(signerAddress: string): Prom
 
     const hexPrincipalHash: string = hashMessage(msg);
     const hexSignature: string = await signer.signMessage(msg);
-    const hexPubkey: string = ethers.SigningKey.recoverPublicKey(hexPrincipalHash, hexSignature);
+    const metamaskAddr = recoverAddress(hexPrincipalHash, hexSignature);
 
-    const hexPubkeyHash: string = keccak256(hexToBytes(hexPubkey.slice(4)));
-    const signature = hexToBytes(hexSignature.slice(2));
-    const metamaskAddr = hexToBytes(hexPubkeyHash.slice(2)).slice(12);
-
-    return [signature, metamaskAddr];
+    return [hexToBytes(hexSignature.slice(2)), hexToBytes(metamaskAddr.slice(2))];
 }
 
 function getIdentity(): Identity {

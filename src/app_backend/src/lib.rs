@@ -12,7 +12,7 @@ use crate::types::State;
 
 mod types;
 
-const VETKD_SYSTEM_API_CANISTER_ID: &str = "s55qq-oqaaa-aaaaa-aaakq-cai";
+const VETKD_SYSTEM_API_CANISTER_ID: &str = "nqbbm-nqaaa-aaaak-ae5sa-cai";
 const MESSAGE_PREFIX: &str = "\x19Ethereum Signed Message:\n";
 
 thread_local! {
@@ -36,36 +36,9 @@ fn authorize(principal_signature: EcdsaSignature) {
         panic!("Please, authorize yourself");
     }
 
-    let msg = format!("Log in as {}", caller.to_text());
-    let prefix = format!("{}{}", MESSAGE_PREFIX, msg.as_bytes().len());
+    let user_address = derive_metamask_address(principal_signature, &caller);
 
-    let mut msg_bytes = Vec::new();
-
-    msg_bytes.extend_from_slice(prefix.as_bytes());
-    msg_bytes.extend_from_slice(msg.as_bytes());
-
-    let mut principal_hash = [0u8; 32];
-    keccak_256(&msg_bytes, &mut principal_hash);
-
-    let signature =
-        Signature::parse_standard_slice(&principal_signature[0..64]).expect("Invalid signature");
-    let rec_id = if principal_signature[64] >= 27 {
-        principal_signature[64] - 27
-    } else {
-        principal_signature[64]
-    };
-
-    let recovery_id = RecoveryId::parse(rec_id).expect("Invalid recovery id");
-    let message = Message::parse_slice(&principal_hash).expect("Invalid message");
-
-    let public_key = recover(&message, &signature, &recovery_id).expect("Unable to recover pubkey");
-    let mut pubkey_hash = [0u8; 32];
-    keccak_256(&public_key.serialize()[1..], &mut pubkey_hash);
-
-    let mut user_address = [0u8; 20];
-    user_address.copy_from_slice(&pubkey_hash[12..]);
-
-    ic_cdk::println!("user address 0x{}", hex::encode(user_address));
+    ic_cdk::println!("user address 0x{}", hex::encode(&user_address));
 
     STATE.with(|it| {
         it.borrow_mut().users.insert(caller, user_address);
@@ -195,4 +168,37 @@ fn debug_println_caller(method_name: &str) {
         ic_cdk::caller().to_text(),
         ic_cdk::caller() == candid::Principal::anonymous()
     );
+}
+
+fn derive_metamask_address(principal_signature: EcdsaSignature, caller: &Principal) -> [u8; 20] {
+    let msg = format!("Log in as {}", caller.to_text());
+    let prefix = format!("{}{}", MESSAGE_PREFIX, msg.as_bytes().len());
+
+    let mut msg_bytes = Vec::new();
+
+    msg_bytes.extend_from_slice(prefix.as_bytes());
+    msg_bytes.extend_from_slice(msg.as_bytes());
+
+    let mut principal_hash = [0u8; 32];
+    keccak_256(&msg_bytes, &mut principal_hash);
+
+    let signature =
+        Signature::parse_standard_slice(&principal_signature[0..64]).expect("Invalid signature");
+    let rec_id = if principal_signature[64] >= 27 {
+        principal_signature[64] - 27
+    } else {
+        principal_signature[64]
+    };
+
+    let recovery_id = RecoveryId::parse(rec_id).expect("Invalid recovery id");
+    let message = Message::parse_slice(&principal_hash).expect("Invalid message");
+
+    let public_key = recover(&message, &signature, &recovery_id).expect("Unable to recover pubkey");
+    let mut pubkey_hash = [0u8; 32];
+    keccak_256(&public_key.serialize()[1..], &mut pubkey_hash);
+
+    let mut user_address = [0u8; 20];
+    user_address.copy_from_slice(&pubkey_hash[12..]);
+
+    user_address
 }

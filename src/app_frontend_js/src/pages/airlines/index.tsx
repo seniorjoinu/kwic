@@ -56,7 +56,8 @@ export function AirlinesPage() {
             payload: shareRequest
         };
 
-        setTimeout(() => w.postMessage(msg), 1000);
+        // TODO: we need a protocol that the remote window first says "READY" and only then receives the proof request
+        setTimeout(() => w.postMessage(msg), 5000);
     };
 
     const handleMessage = async (e: MessageEvent | null) => {
